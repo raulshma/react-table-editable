@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { CSSProperties, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 //
@@ -14,10 +14,7 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   flexRender,
-  RowData,
-  DisplayColumnDef,
-  AccessorColumnDef,
-  GroupColumnDef
+  RowData
 } from '@tanstack/react-table'
 import { makeData, Person } from './makeData'
 
@@ -27,8 +24,10 @@ declare module '@tanstack/react-table' {
   }
 }
 
+const defaultTableCss = { table: undefined, thead: undefined, th: undefined, tbody: undefined, tr: undefined, td: undefined }
+
 // Give our default column cell renderer editing superpowers!
-const defaultColumn: Partial<ColumnDef<Person>> = {
+const defaultColumn: Partial<ColumnDef<any>> = {
   // eslint-disable-next-line
   cell: ({ getValue, row: { index }, column: { id, columnDef: { inputType, options, optionDefault, selectDisableOptionFn, disableControl, selectDisableFn, customCellComponent }, }, table }) => {
     const initialValue = getValue()
@@ -99,7 +98,8 @@ function App() {
           {
             accessorKey: 'firstName',
             footer: props => props.column.id,
-            inputType: 'text'
+            inputType: 'text',
+            enableColumnFilter: false,
           },
           {
             accessorFn: row => row.lastName,
@@ -124,6 +124,7 @@ function App() {
             columns: [
               {
                 accessorKey: 'visits',
+                canFilter: false,
                 header: () => <span>Visits</span>,
                 footer: props => props.column.id,
               },
@@ -167,9 +168,13 @@ function App() {
 
   return <>
     <button onClick={getChangedRows}>Get changed Rows</button>
-    <EditableTable data={data} setData={setData} rowChangeHandler={setChangedRows} columns={columns} refreshData={refreshData} rerender={rerender} />
+    <EditableTable data={data} setData={setData} rowChangeHandler={setChangedRows} columns={columns} refreshData={refreshData} rerender={rerender} customClassNames={{ table: 'content-table' }} pagination={'Client'} />
   </>
 }
+
+type CSSPropertiesStyle = CSSProperties | undefined
+
+type TableStyles<T> = Partial<{ table: T, thead: T, th: T, tbody: T, tr: T, td: T }>;
 
 type EditableTableOptions<T> = {
   data: Array<T>,
@@ -177,11 +182,15 @@ type EditableTableOptions<T> = {
   columns: any,
   refreshData: any,
   rerender: any
-  rowChangeHandler: React.Dispatch<React.SetStateAction<Map<any, any>>>
+  rowChangeHandler: React.Dispatch<React.SetStateAction<Map<any, any>>>,
+  customStyles?: TableStyles<CSSPropertiesStyle>,
+  customClassNames?: TableStyles<string | undefined>,
+  pagination?: "Client" | "Server",
+  filterable?: boolean
 }
 
-const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, rerender }: EditableTableOptions<any>) => {
-
+const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, rerender, customStyles = defaultTableCss, customClassNames = defaultTableCss, pagination = undefined, filterable = false }: EditableTableOptions<any>) => {
+  console.count("table")
   const [autoResetPageIndex, skipAutoResetPageIndex] = useSkipper()
 
   const table = useReactTable({
@@ -192,6 +201,7 @@ const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, 
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     autoResetPageIndex,
+    enableFilters: filterable,
     // Provide our updateData function to our table meta
     meta: {
       updateData: (rowIndex, columnId, value) => {
@@ -222,13 +232,13 @@ const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, 
   return (
     <div className="p-2">
       <div className="h-2" />
-      <table>
-        <thead>
+      <table className={customClassNames.table} style={customStyles.table}>
+        <thead className={customClassNames.thead} style={customStyles.thead}>
           {table.getHeaderGroups().map(headerGroup => (
-            <tr key={headerGroup.id}>
+            <tr key={headerGroup.id} style={customStyles.tr}>
               {headerGroup.headers.map(header => {
                 return (
-                  <th key={header.id} colSpan={header.colSpan}>
+                  <th key={header.id} colSpan={header.colSpan} style={customStyles.th}>
                     {header.isPlaceholder ? null : (
                       <div>
                         {flexRender(
@@ -248,13 +258,13 @@ const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, 
             </tr>
           ))}
         </thead>
-        <tbody>
+        <tbody style={customStyles.tbody}>
           {table.getRowModel().rows.map(row => {
             return (
-              <tr key={row.id}>
+              <tr key={row.id} style={customStyles.tr}>
                 {row.getVisibleCells().map(cell => {
                   return (
-                    <td key={cell.id}>
+                    <td key={cell.id} style={customStyles.td}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
@@ -268,7 +278,7 @@ const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, 
         </tbody>
       </table>
       <div className="h-2" />
-      <div className="flex items-center gap-2">
+      {pagination && <div className="flex items-center gap-2">
         <button
           className="border rounded p-1"
           onClick={() => table.setPageIndex(0)}
@@ -328,7 +338,7 @@ const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, 
             </option>
           ))}
         </select>
-      </div>
+      </div>}
       <div>{table.getRowModel().rows.length} Rows</div>
       <div>
         <button onClick={() => rerender()}>Force Rerender</button>
