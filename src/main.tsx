@@ -1,4 +1,4 @@
-import React, { CSSProperties, useState } from 'react'
+import React, { CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 //
@@ -88,70 +88,31 @@ function useSkipper() {
 function App() {
   const rerender = React.useReducer(() => ({}), {})[1]
   const [changedRows, setChangedRows] = useState(new Map());
-  const [num, setNum] = useState(1)
+  const hasEditSet = useRef<Boolean>(false)
   const columns = React.useMemo<ColumnDef<Person>[]>(
     () => [
       {
-        header: 'Name',
-        footer: props => props.column.id,
-        columns: [
-          {
-            accessorKey: 'firstName',
-            footer: props => props.column.id,
-            inputType: 'text',
-            enableColumnFilter: false,
-          },
-          {
-            accessorFn: row => row.lastName,
-            id: 'lastName',
-            header: () => <span>Last Name</span>,
-            footer: props => props.column.id,
-          },
-        ],
+        header: 'User Id',
+        accessorKey: 'userId'
       },
       {
-        header: 'Info',
-        footer: props => props.column.id,
-        columns: [
-          {
-            accessorKey: 'age',
-            header: () => 'Age',
-            footer: props => props.column.id,
-            customCellComponent: (value: any, onChange: any, onBlur: any) => <input type="number" value={value} onChange={e => onChange(e.target.value)} onBlur={onBlur}></input>
-          },
-          {
-            header: 'More Info',
-            columns: [
-              {
-                accessorKey: 'visits',
-                canFilter: false,
-                header: () => <span>Visits</span>,
-                footer: props => props.column.id,
-              },
-              {
-                accessorKey: 'status',
-                header: 'Status',
-                footer: props => props.column.id,
-                inputType: 'select',
-                options: [{ id: 1, value: "complicated" }, { id: 2, value: "single" }, { id: 3, value: "relationship" }],
-                defaultValue: 2,
-                selectDisableOptionFn: (item: { id: number | string, value: string }) => item.id === 2
-              },
-              {
-                accessorKey: 'gender',
-                header: 'Gender',
-                footer: props => props.column.id,
-                inputType: 'checkbox',
-                disableControl: true
-              },
-              {
-                accessorKey: 'progress',
-                header: 'Profile Progress',
-                footer: props => props.column.id,
-              },
-            ],
-          },
-        ],
+        accessorKey: 'id',
+        header: 'ID',
+        customCellComponent: (value: any, onChange: any, onBlur: any) => <input type="number" value={value} onChange={e => onChange(e.target.value)} onBlur={onBlur}></input>
+      },
+      {
+        accessorKey: 'title',
+        header: 'Title',
+        inputType: 'text',
+        disableControl: true
+      },
+      {
+        accessorKey: 'completed',
+        header: 'Completed',
+        inputType: 'select',
+        options: [{ id: 1, value: 'true' }, { id: 2, value: 'false' }],
+        defaultValue: 2,
+        selectDisableOptionFn: (item: { id: number | string, value: string }) => item.id === 2
       },
     ],
     []
@@ -160,15 +121,57 @@ function App() {
   const [data, setData] = React.useState(() => makeData(1000))
   const refreshData = () => setData(() => makeData(1000))
 
+  const setEdit = useCallback(() => {
+    debugger;
+    if (hasEditSet.current === false)
+      hasEditSet.current = true;
+  }, [hasEditSet.current]);
+
   const getChangedRows = () => {
     if (changedRows && changedRows.size > 0) {
       console.log(changedRows)
+      const firstItem = changedRows.entries().next().value;
+      const [index, row] = firstItem;
+      if (Object.keys(row).length > 0) {
+        // updateRows(row)
+      }
     }
+    console.log(hasEditSet.current)
+  }
+
+  const updateRows = (todo: any) => {
+    fetch('https://jsonplaceholder.typicode.com/todos', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: todo.title,
+        completed: todo.completed,
+        userId: 1,
+        id: Number(todo.id)
+      }),
+      headers: {
+        'Content-type': 'application/json; charset=UTF-8',
+      },
+    })
+      .then((response) => response.json())
+      .then((json) => { console.log(json); getData(); });
+  }
+
+  const getData = () => {
+    fetch('https://jsonplaceholder.typicode.com/todos').then(data => data.json()).then(
+      res => setData(res)
+    )
+  }
+  useEffect(() => {
+    getData();
+  }, [])
+
+  if (!data) {
+    return <>Loading...</>
   }
 
   return <>
     <button onClick={getChangedRows}>Get changed Rows</button>
-    <EditableTable data={data} setData={setData} rowChangeHandler={setChangedRows} columns={columns} refreshData={refreshData} rerender={rerender} customClassNames={{ table: 'content-table' }} pagination={'Client'} />
+    <EditableTable data={data} setData={setData} rowChangeHandler={setChangedRows} columns={columns} refreshData={refreshData} rerender={rerender} customClassNames={{ table: 'content-table' }} pagination={'Client'} setEditStatus={setEdit} currentEditStatus={hasEditSet.current} />
   </>
 }
 
@@ -186,10 +189,12 @@ type EditableTableOptions<T> = {
   customStyles?: TableStyles<CSSPropertiesStyle>,
   customClassNames?: TableStyles<string | undefined>,
   pagination?: "Client" | "Server",
-  filterable?: boolean
+  filterable?: boolean,
+  setEditStatus?: () => void,
+  currentEditStatus?: Boolean
 }
 
-const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, rerender, customStyles = defaultTableCss, customClassNames = defaultTableCss, pagination = undefined, filterable = false }: EditableTableOptions<any>) => {
+const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, rerender, customStyles = defaultTableCss, customClassNames = defaultTableCss, pagination = undefined, filterable = false, setEditStatus = undefined, currentEditStatus = undefined }: EditableTableOptions<any>) => {
   console.count("table")
   const [autoResetPageIndex, skipAutoResetPageIndex] = useSkipper()
 
@@ -219,6 +224,8 @@ const EditableTable = ({ data, setData, columns, rowChangeHandler, refreshData, 
               }
               if (hasChanged)
                 rowChangeHandler(prev => prev.set(rowIndex, newData))
+              if (setEditStatus && currentEditStatus !== undefined && currentEditStatus !== true)
+                setEditStatus();
               return newData;
             }
             return row
